@@ -1,14 +1,13 @@
 import flet as ft
 import requests
-import os
 
-# Base de datos en Firebase (nodo separado para el gimnasio)
 FIREBASE_URL = "https://listacompracasa-default-rtdb.firebaseio.com/gimnasio"
 
 def main(page: ft.Page):
     page.title = "Rutina de Gimnasio"
-    page.padding = 20
+    page.padding = 15
     page.theme_mode = ft.ThemeMode.LIGHT
+    page.scroll = ft.ScrollMode.AUTO
 
     # Campos de entrada
     dropdown_usuario = ft.Dropdown(
@@ -36,114 +35,138 @@ def main(page: ft.Page):
         ]
     )
 
-    input_ejercicio = ft.TextField(hint_text="Ejercicio (ej: Press de Banca)", expand=True)
-    input_series = ft.TextField(hint_text="Series (4)", width=90)
-    input_reps = ft.TextField(hint_text="Reps (10)", width=90)
-    input_peso = ft.TextField(hint_text="Peso kg", width=90)
+    txt_ejercicio = ft.TextField(label="Ejercicio (ej: Banco Inclinado)", expand=True)
+    
+    dropdown_serie = ft.Dropdown(
+        value="Serie 1",
+        width=110,
+        options=[
+            ft.dropdown.Option("Calentamiento"),
+            ft.dropdown.Option("Serie 1"),
+            ft.dropdown.Option("Serie 2"),
+            ft.dropdown.Option("Serie 3"),
+            ft.dropdown.Option("Serie 4"),
+            ft.dropdown.Option("Serie 5"),
+        ]
+    )
 
-    columna_rutina = ft.Column(scroll=ft.ScrollMode.AUTO)
+    txt_reps = ft.TextField(label="Reps", width=80, keyboard_type=ft.KeyboardType.NUMBER)
+    txt_peso = ft.TextField(label="Peso (kg)", width=100, keyboard_type=ft.KeyboardType.NUMBER)
+    txt_notas = ft.TextField(label="Notas / Detalles (ej: punto 2, al fallo)", expand=True)
 
-    def cargar_datos():
-        columna_rutina.controls.clear()
+    lista_ejercicios = ft.Column()
+
+    def cargar_datos(e=None):
+        lista_ejercicios.controls.clear()
+        usuario = dropdown_usuario.value
+        dia = dropdown_dia.value
+
         try:
-            res = requests.get(f"{FIREBASE_URL}.json")
-            datos = res.json() if res.status_code == 200 else {}
-        except Exception:
-            datos = {}
+            res = requests.get(f"{FIREBASE_URL}/{usuario}/{dia}.json")
+            datos = res.json()
 
-        hay_datos = False
-        if datos and isinstance(datos, dict):
-            for clave, item in datos.items():
-                if isinstance(item, dict):
-                    hay_datos = True
-                    ejercicio = item.get("ejercicio", "")
-                    dia = item.get("dia", "")
-                    series = item.get("series", "")
-                    reps = item.get("reps", "")
-                    peso = item.get("peso", "")
-                    usuario = item.get("usuario", "Juan")
+            if datos:
+                for key, val in datos.items():
+                    ejercicio = val.get("ejercicio", "")
+                    tipo_serie = val.get("serie", "Serie")
+                    reps = val.get("reps", "")
+                    peso = val.get("peso", "")
+                    notas = val.get("notas", "")
 
-                    def al_borrar(e, key=clave):
-                        requests.delete(f"{FIREBASE_URL}/{key}.json")
+                    texto_item = f"• {ejercicio} | {tipo_serie}: {peso} kg x {reps} reps"
+                    if notas:
+                        texto_item += f" ({notas})"
+
+                    def borrar_item(e, item_id=key):
+                        requests.delete(f"{FIREBASE_URL}/{usuario}/{dia}/{item_id}.json")
                         cargar_datos()
 
-                    tarjeta = ft.Container(
-                        content=ft.Row([
-                            ft.Column([
-                                ft.Text(f"🏋️ {ejercicio}", weight=ft.FontWeight.BOLD, size=16),
-                                ft.Text(f"📅 {dia} | {series} series x {reps} reps | {peso} kg", color="blueGrey"),
-                                ft.Text(f"👤 {usuario}", size=12, color="grey"),
-                            ], expand=True),
-                            ft.IconButton(
-                                icon="delete_outline",
-                                icon_color="red",
-                                tooltip="Eliminar ejercicio",
-                                on_click=al_borrar
+                    lista_ejercicios.controls.append(
+                        ft.Card(
+                            content=ft.Container(
+                                padding=10,
+                                content=ft.Row([
+                                    ft.Text(texto_item, expand=True, size=15),
+                                    ft.IconButton(
+                                        icon=ft.icons.DELETE,
+                                        icon_color="red",
+                                        on_click=borrar_item
+                                    )
+                                ])
                             )
-                        ]),
-                        padding=10,
-                        bgcolor="grey100",
-                        border_radius=8
+                        )
                     )
-                    columna_rutina.controls.append(tarjeta)
-
-        if not hay_datos:
-            columna_rutina.controls.append(
-                ft.Text("No hay ejercicios registrados. ¡Añade el primero!", color="grey", italic=True)
+            else:
+                lista_ejercicios.controls.append(
+                    ft.Text("No hay registros guardados para este día.", italic=True, color="gray")
+                )
+        except Exception as ex:
+            lista_ejercicios.controls.append(
+                ft.Text(f"Error al cargar datos: {ex}", color="red")
             )
+        
         page.update()
 
     def agregar_ejercicio(e):
-        if input_ejercicio.value.strip():
-            nuevo = {
-                "usuario": dropdown_usuario.value,
-                "dia": dropdown_dia.value,
-                "ejercicio": input_ejercicio.value.strip().capitalize(),
-                "series": input_series.value.strip() or "-",
-                "reps": input_reps.value.strip() or "-",
-                "peso": input_peso.value.strip() or "-",
-            }
-            requests.post(f"{FIREBASE_URL}.json", json=nuevo)
-            input_ejercicio.value = ""
-            input_series.value = ""
-            input_reps.value = ""
-            input_peso.value = ""
-            cargar_datos()
+        if not txt_ejercicio.value or not txt_reps.value or not txt_peso.value:
+            page.snack_bar = ft.SnackBar(ft.Text("Rellena Ejercicio, Reps y Peso"))
+            page.snack_bar.open = True
+            page.update()
+            return
 
-    btn_refrescar = ft.IconButton(
-        icon="refresh",
-        tooltip="Actualizar rutina",
-        on_click=lambda e: cargar_datos()
+        usuario = dropdown_usuario.value
+        dia = dropdown_dia.value
+
+        nuevo_registro = {
+            "ejercicio": txt_ejercicio.value.strip(),
+            "serie": dropdown_serie.value,
+            "reps": txt_reps.value.strip(),
+            "peso": txt_peso.value.strip(),
+            "notas": txt_notas.value.strip()
+        }
+
+        try:
+            requests.post(f"{FIREBASE_URL}/{usuario}/{dia}.json", json=nuevo_registro)
+            
+            # Limpiar campos de entrada (mantenemos el nombre del ejercicio para facilitar meter la siguiente serie)
+            txt_reps.value = ""
+            txt_peso.value = ""
+            txt_notas.value = ""
+            
+            # Avanzar automáticamente el desplegable a la siguiente serie
+            if dropdown_serie.value == "Serie 1":
+                dropdown_serie.value = "Serie 2"
+            elif dropdown_serie.value == "Serie 2":
+                dropdown_serie.value = "Serie 3"
+            elif dropdown_serie.value == "Serie 3":
+                dropdown_serie.value = "Serie 4"
+
+            cargar_datos()
+        except Exception as ex:
+            page.snack_bar = ft.SnackBar(ft.Text(f"Error al guardar: {ex}"))
+            page.snack_bar.open = True
+            page.update()
+
+    dropdown_usuario.on_change = cargar_datos
+    dropdown_dia.on_change = cargar_datos
+
+    btn_guardar = ft.FloatingActionButton(
+        icon=ft.icons.ADD,
+        on_click=agregar_ejercicio,
+        bgcolor="green"
     )
 
     page.add(
-        ft.Row([
-            ft.Text("💪 Mi Rutina de Gimnasio", size=20, weight=ft.FontWeight.BOLD, expand=True),
-            dropdown_usuario,
-            btn_refrescar
-        ]),
+        ft.Row([ft.Text("💪 Registro Gym", size=22, weight="bold"), dropdown_usuario, ft.IconButton(ft.icons.REFRESH, on_click=cargar_datos)]),
         ft.Divider(),
-        ft.Row([
-            dropdown_dia,
-            input_ejercicio,
-        ]),
-        ft.Row([
-            input_series,
-            input_reps,
-            input_peso,
-            ft.IconButton(
-                icon="add_circle",
-                icon_size=36,
-                icon_color="green",
-                on_click=agregar_ejercicio
-            )
-        ]),
+        ft.Row([dropdown_dia, txt_ejercicio]),
+        ft.Row([dropdown_serie, txt_reps, txt_peso]),
+        ft.Row([txt_notas, btn_guardar]),
         ft.Divider(),
-        columna_rutina
+        ft.Text("Progreso registrado:", size=16, weight="bold"),
+        lista_ejercicios
     )
 
     cargar_datos()
 
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8080))
-    ft.app(target=main, view=ft.AppView.WEB_BROWSER, host="0.0.0.0", port=port)
+ft.app(target=main)
