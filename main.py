@@ -1,7 +1,7 @@
 import flet as ft
 import requests
 
-FIREBASE_URL = "https://listacompracasa-default-rtdb.firebaseio.com/gimnasio"
+FIREBASE_URL = "https://listacompracasdefaulta--rtdb.firebaseio.com/gimnasio/"
 
 def main(page: ft.Page):
     page.title = "Rutina de Gimnasio"
@@ -9,7 +9,6 @@ def main(page: ft.Page):
     page.theme_mode = ft.ThemeMode.LIGHT
     page.scroll = ft.ScrollMode.AUTO
 
-    # Campos de entrada
     dropdown_usuario = ft.Dropdown(
         value="Juan",
         width=120,
@@ -67,15 +66,17 @@ def main(page: ft.Page):
 
             if datos:
                 for key, val in datos.items():
-                    ejercicio = val.get("ejercicio", "")
-                    tipo_serie = val.get("serie", "Serie")
-                    reps = val.get("reps", "")
-                    peso = val.get("peso", "")
-                    notas = val.get("notas", "")
-
-                    texto_item = f"• {ejercicio} | {tipo_serie}: {peso} kg x {reps} reps"
-                    if notas:
-                        texto_item += f" ({notas})"
+                    if isinstance(val, dict):
+                        ejercicio = val.get("ejercicio", "")
+                        tipo_serie = val.get("serie", "Serie")
+                        reps = val.get("reps", "")
+                        peso = val.get("peso", "")
+                        notas = val.get("notas", "")
+                        texto_item = f"• {ejercicio} | {tipo_serie}: {peso} kg x {reps} reps"
+                        if notas:
+                            texto_item += f" ({notas})"
+                    else:
+                        texto_item = f"• {str(val)}"
 
                     def borrar_item(e, item_id=key):
                         requests.delete(f"{FIREBASE_URL}/{usuario}/{dia}/{item_id}.json")
@@ -128,12 +129,10 @@ def main(page: ft.Page):
         try:
             requests.post(f"{FIREBASE_URL}/{usuario}/{dia}.json", json=nuevo_registro)
             
-            # Limpiar campos de entrada (mantenemos el nombre del ejercicio para facilitar meter la siguiente serie)
             txt_reps.value = ""
             txt_peso.value = ""
             txt_notas.value = ""
             
-            # Avanzar automáticamente el desplegable a la siguiente serie
             if dropdown_serie.value == "Serie 1":
                 dropdown_serie.value = "Serie 2"
             elif dropdown_serie.value == "Serie 2":
@@ -168,5 +167,3 @@ def main(page: ft.Page):
     )
 
     cargar_datos()
-
-ft.app(target=main)
