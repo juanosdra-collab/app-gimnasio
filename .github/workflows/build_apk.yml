@@ -42,7 +42,7 @@ jobs:
           flet build apk app_compartida.py
 
       - name: Subir APK como artefacto descargable
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ListaCompraApp-APK
           path: build/apk/*.apk
